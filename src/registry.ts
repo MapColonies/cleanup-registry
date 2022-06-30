@@ -1,24 +1,25 @@
 import { TypedEmitter } from 'tiny-typed-emitter';
-import { DAFAULT_TIMEOUT_AFTER_REJECT, DEFAULT_OVERALL_TIMEOUT } from './common/constants';
+import { DAFAULT_TIMEOUT_AFTER_FAILURE, DEFAULT_OVERALL_TIMEOUT, DEFAULT_TRIGGER_OPTIONS } from './common/constants';
 import { TimeoutError } from './common/errors';
 import { delay, promiseResult, promiseTimeout } from './common/util';
-import { CleanupItem, RegistryEvents, RegistryOptions } from './common/interfaces';
-import { AsyncFunc, RegisterOptions, RemoveItem } from './common/types';
+import { CleanupItem, RegistryEvents, RegistryOptions, TriggerOptions } from './common/interfaces';
+import { AsyncFunc, FinishStatus, RegisterOptions, RemoveItem } from './common/types';
 
 export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
-  private registry: CleanupItem[] = [];
-  private hasTriggered = false;
-  private overallCleanupExpired = false;
-  private overallCleanupExpireTimer: NodeJS.Timer | undefined;
   private readonly preCleanup?: AsyncFunc;
   private readonly postCleanup?: AsyncFunc;
-  private readonly overallExpireCleanup: number;
+  private readonly overallTimeout: number;
+
+  private registry: CleanupItem[] = [];
+  private hasTriggered = false;
+  private overallExpired = false;
+  private overallExpireTimer: NodeJS.Timer | undefined;
 
   public constructor(registryOptions?: RegistryOptions) {
     super();
     this.preCleanup = registryOptions?.preCleanup;
     this.postCleanup = registryOptions?.postCleanup;
-    this.overallExpireCleanup = registryOptions?.overallExpireCleanup ?? DEFAULT_OVERALL_TIMEOUT;
+    this.overallTimeout = registryOptions?.overallTimeout ?? DEFAULT_OVERALL_TIMEOUT;
   }
 
   public register(registerItem: RegisterOptions): void {
@@ -26,21 +27,21 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
       return;
     }
 
-    const { func, id, timeout, timeoutAfterReject } = registerItem;
+    const { func, id, timeout, timeoutAfterFailure } = registerItem;
 
     const itemId = id !== undefined ? id : func.name;
 
-    let itemTimeout = this.overallExpireCleanup;
+    let itemTimeout = this.overallTimeout;
     if (timeout !== undefined) {
-      itemTimeout = timeout < this.overallExpireCleanup ? timeout : this.overallExpireCleanup;
+      itemTimeout = timeout < this.overallTimeout ? timeout : this.overallTimeout;
     }
 
-    let itemTimeoutAfterReject = DAFAULT_TIMEOUT_AFTER_REJECT;
-    if (timeoutAfterReject !== undefined) {
-      itemTimeoutAfterReject = timeoutAfterReject < this.overallExpireCleanup ? timeoutAfterReject : this.overallExpireCleanup;
+    let itemTimeoutAfterFailure = DAFAULT_TIMEOUT_AFTER_FAILURE;
+    if (timeoutAfterFailure !== undefined) {
+      itemTimeoutAfterFailure = timeoutAfterFailure < this.overallTimeout ? timeoutAfterFailure : this.overallTimeout;
     }
 
-    this.registry.push({ func, id: itemId, timeout: itemTimeout, timeoutAfterReject: itemTimeoutAfterReject });
+    this.registry.push({ func, id: itemId, timeout: itemTimeout, timeoutAfterFailure: itemTimeoutAfterFailure });
   }
 
   public remove(removeItem: RemoveItem): void {
@@ -62,11 +63,12 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
     this.registry = filtered;
   }
 
-  public async trigger(): Promise<void> {
+  public async trigger(triggerOptions: TriggerOptions = DEFAULT_TRIGGER_OPTIONS): Promise<void> {
     if (this.hasTriggered) {
       return;
     }
 
+    const { shouldThrowIfPreErrors, shouldThrowIfPostErrors } = triggerOptions;
     this.hasTriggered = true;
 
     this.emit('started');
@@ -74,52 +76,63 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
     this.initCleanupExpiredTimer();
 
     if (this.preCleanup) {
-      await promiseResult(this.preCleanup());
+      const [preErr] = await promiseResult(this.preCleanup());
+      if (preErr !== undefined && shouldThrowIfPreErrors === true) {
+        this.finish('preThrown');
+        throw preErr;
+      }
     }
 
     await this.cleanup();
 
     if (this.postCleanup) {
-      await promiseResult(this.postCleanup());
+      const [postErr] = await promiseResult(this.postCleanup());
+      if (postErr !== undefined && shouldThrowIfPostErrors === true) {
+        this.finish('postThrown');
+        throw postErr;
+      }
     }
 
-    clearTimeout(this.overallCleanupExpireTimer);
-
-    this.emit('finished', this.overallCleanupExpired ? 'timedout' : 'success');
+    this.finish(this.overallExpired ? 'timedout' : 'success');
   }
 
   public clear(): void {
     this.registry = [];
     this.hasTriggered = false;
-    this.overallCleanupExpired = false;
-    clearTimeout(this.overallCleanupExpireTimer);
+    this.overallExpired = false;
+    clearTimeout(this.overallExpireTimer);
+  }
+
+  private finish(status: FinishStatus): void {
+    clearTimeout(this.overallExpireTimer);
+    this.emit('finished', status);
   }
 
   private async cleanup(): Promise<void> {
     const cleanupPromises = this.registry.map(async (item) => {
-      let error: Error | undefined;
+      let error: unknown;
 
       do {
         const timeoutFunction = promiseTimeout(item.func(), item.timeout);
 
         [error] = await promiseResult(timeoutFunction);
 
-        if (error) {
+        if (error !== undefined) {
           this.emit('itemFailed', item.id, error);
-          const delayMs = error instanceof TimeoutError ? DAFAULT_TIMEOUT_AFTER_REJECT : item.timeoutAfterReject;
+          const delayMs = error instanceof TimeoutError ? DAFAULT_TIMEOUT_AFTER_FAILURE : item.timeoutAfterFailure;
           await delay(delayMs);
         } else {
           this.emit('itemCompleted', item.id);
         }
-      } while (error !== undefined && !this.overallCleanupExpired);
+      } while (error !== undefined && !this.overallExpired);
     });
 
     await Promise.allSettled(cleanupPromises);
   }
 
   private initCleanupExpiredTimer(): void {
-    this.overallCleanupExpireTimer = setTimeout(() => {
-      this.overallCleanupExpired = true;
-    }, this.overallExpireCleanup);
+    this.overallExpireTimer = setTimeout(() => {
+      this.overallExpired = true;
+    }, this.overallTimeout);
   }
 }

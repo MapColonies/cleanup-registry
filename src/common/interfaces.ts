@@ -3,14 +3,19 @@ import { AsyncFunc, ItemId, FinishStatus } from './types';
 export interface RegistryOptions {
   preCleanup?: AsyncFunc;
   postCleanup?: AsyncFunc;
-  overallExpireCleanup?: number;
+  overallTimeout?: number;
+}
+
+export interface TriggerOptions {
+  shouldThrowIfPreErrors?: boolean;
+  shouldThrowIfPostErrors?: boolean;
 }
 
 export interface CleanupItem {
   func: AsyncFunc;
   id: ItemId;
   timeout: number;
-  timeoutAfterReject: number;
+  timeoutAfterFailure: number;
 }
 
 export interface RegistryEvents {

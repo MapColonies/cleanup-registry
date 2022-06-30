@@ -4,7 +4,7 @@ export type AsyncFunc<T = unknown> = () => Promise<T>;
 
 export type ItemId = string | symbol;
 
-export type RegisterOptions = Partial<CleanupItem> & {
+export type RegisterOptions = Partial<Omit<CleanupItem, 'func'>> & {
   func: AsyncFunc;
 };
 
@@ -20,4 +20,4 @@ export type RemoveItem = {
     }
 );
 
-export type FinishStatus = 'success' | 'timedout';
+export type FinishStatus = 'success' | 'timedout' | 'preThrown' | 'postThrown';
