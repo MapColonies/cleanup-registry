@@ -5,7 +5,7 @@ export const promiseResult = async <T>(promise: Promise<T>): Promise<[undefined,
     const value = await promise;
     return [undefined, value];
   } catch (error) {
-    return [error !== undefined ? (error as Error) : new Error('internal promise rejected with undefined'), undefined];
+    return [error !== undefined ? error : new Error('internal promise rejected with undefined'), undefined];
   }
 };
 

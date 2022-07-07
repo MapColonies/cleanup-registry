@@ -7,13 +7,16 @@ export interface RegistryOptions {
 }
 
 export interface TriggerOptions {
-  shouldThrowIfPreErrors?: boolean;
-  shouldThrowIfPostErrors?: boolean;
+  ignorePreError?: boolean;
+  ignorePostError?: boolean;
 }
 
-export interface CleanupItem {
+export interface BaseItem {
   func: AsyncFunc;
   id: ItemId;
+}
+
+export interface CleanupItem extends BaseItem {
   timeout: number;
   timeoutAfterFailure: number;
 }

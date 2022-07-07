@@ -1,5 +1,5 @@
 import { CleanupRegistry } from '../../src/registry';
-import { TimeoutError } from '../../src/common/errors';
+import { AlreadyTriggeredError, RegisterError, TimeoutError } from '../../src/common/errors';
 import { OVERALL_TIMEOUT, fakeAsyncFuncGenerator } from './helpers';
 
 describe('registry', () => {
@@ -20,6 +20,7 @@ describe('registry', () => {
 
       registry.on('started', startedEventHandler);
       registry.on('itemFailed', itemFailedEventHandler);
+      registry.on('itemCompleted', itemCompletedEventHandler);
       registry.on('finished', finishedEventHandler);
 
       registry.register({ func: resolvingFunc });
@@ -29,6 +30,7 @@ describe('registry', () => {
       expect(startedEventHandler).toHaveBeenCalled();
       expect(resolvingFunc).toHaveBeenCalled();
       expect(itemFailedEventHandler).not.toHaveBeenCalled();
+      expect(itemCompletedEventHandler).toHaveBeenCalled();
       expect(finishedEventHandler).toHaveBeenCalledWith('success');
     });
 
@@ -67,8 +69,26 @@ describe('registry', () => {
 
       await expect(registry.trigger()).resolves.not.toThrow();
 
-      expect(itemFailedEventHandler).toHaveBeenCalledTimes(2);
+      expect(itemFailedEventHandler).toHaveBeenCalledTimes(OVERALL_TIMEOUT / itemTimeout);
       expect(itemFailedEventHandler).toHaveBeenCalledWith(id, new TimeoutError(`function timed out after ${itemTimeout} ms`));
+      expect(finishedEventHandler).toHaveBeenCalledWith('timedout');
+    });
+
+    it('should emit an finished event with timedout if triggered function keeps on expiring due to internal undefined exception', async function () {
+      const registry = new CleanupRegistry({ overallTimeout: OVERALL_TIMEOUT });
+
+      registry.on('itemFailed', itemFailedEventHandler);
+      registry.on('finished', finishedEventHandler);
+
+      const id = 'someId';
+      const itemTimeout = 100;
+      const timeoutFunc = fakeAsyncFuncGenerator(50, false);
+      registry.register({ func: timeoutFunc, id, timeout: itemTimeout, timeoutAfterFailure: 300 });
+
+      await expect(registry.trigger()).resolves.not.toThrow();
+
+      expect(itemFailedEventHandler).toHaveBeenCalledTimes(3);
+      expect(itemFailedEventHandler).toHaveBeenCalledWith(id, Error('internal promise rejected with undefined'));
       expect(finishedEventHandler).toHaveBeenCalledWith('timedout');
     });
 
@@ -81,13 +101,13 @@ describe('registry', () => {
       registry.on('itemFailed', itemFailedEventHandler);
       registry.on('finished', finishedEventHandler);
 
-      registry.register({ func: rejectingFunc, timeoutAfterFailure: OVERALL_TIMEOUT / 4 });
+      const id = registry.register({ func: rejectingFunc, timeoutAfterFailure: OVERALL_TIMEOUT / 4 });
 
       await expect(registry.trigger()).resolves.not.toThrow();
 
       expect(rejectingFunc).toHaveBeenCalled();
       expect(itemFailedEventHandler).toHaveBeenCalledTimes(4);
-      expect(itemFailedEventHandler).toHaveBeenCalledWith(rejectingFunc.name, error);
+      expect(itemFailedEventHandler).toHaveBeenCalledWith(id, error);
       expect(finishedEventHandler).toHaveBeenCalledWith('timedout');
     });
 
@@ -103,6 +123,21 @@ describe('registry', () => {
       expect(itemFailedEventHandler).not.toHaveBeenCalled();
       expect(itemCompletedEventHandler).not.toHaveBeenCalled();
       expect(finishedEventHandler).toHaveBeenCalledWith('success');
+    });
+
+    it('should emit an item completed event with matching item id', async function () {
+      const registry = new CleanupRegistry();
+
+      const resolvingFunc = jest.fn().mockResolvedValue(undefined);
+
+      registry.on('itemCompleted', itemCompletedEventHandler);
+
+      const itemId = registry.register({ func: resolvingFunc });
+
+      await expect(registry.trigger()).resolves.not.toThrow();
+
+      expect(resolvingFunc).toHaveBeenCalled();
+      expect(itemCompletedEventHandler).toHaveBeenCalledWith(itemId);
     });
 
     it('should emit a finished success event if registry is empty and call pre and post cleanups', async function () {
@@ -150,12 +185,13 @@ describe('registry', () => {
       registry.on('finished', finishedEventHandler);
 
       const timeoutFunc = fakeAsyncFuncGenerator(OVERALL_TIMEOUT, false);
-      registry.register({ func: timeoutFunc, timeout: 100, timeoutAfterFailure: 300 });
+      const itemTimeout = 100;
+      const id = registry.register({ func: timeoutFunc, timeout: itemTimeout, timeoutAfterFailure: 300 });
 
       await expect(registry.trigger()).resolves.not.toThrow();
 
-      expect(itemFailedEventHandler).toHaveBeenCalledTimes(2);
-      expect(itemFailedEventHandler).toHaveBeenCalledWith(timeoutFunc.name, new TimeoutError(`function timed out after ${100} ms`));
+      expect(itemFailedEventHandler).toHaveBeenCalledTimes(OVERALL_TIMEOUT / itemTimeout);
+      expect(itemFailedEventHandler).toHaveBeenCalledWith(id, new TimeoutError(`function timed out after ${100} ms`));
       expect(finishedEventHandler).toHaveBeenCalledWith('timedout');
     });
 
@@ -194,18 +230,18 @@ describe('registry', () => {
       registry.on('itemCompleted', itemCompletedEventHandler);
       registry.on('finished', finishedEventHandler);
 
-      registry.register({ func: resolvingFunc, id: '1' });
-      registry.register({ func: rejectingFunc, id: '2', timeoutAfterFailure: OVERALL_TIMEOUT });
-      registry.register({ func: timeoutFunc, id: '3', timeout: OVERALL_TIMEOUT });
+      const id1 = registry.register({ func: resolvingFunc, id: '1' });
+      const id2 = registry.register({ func: rejectingFunc, id: Symbol('2'), timeoutAfterFailure: OVERALL_TIMEOUT });
+      const id3 = registry.register({ func: timeoutFunc, timeout: OVERALL_TIMEOUT });
 
       await expect(registry.trigger()).resolves.not.toThrow();
 
       expect(resolvingFunc).toHaveBeenCalledTimes(1);
       expect(rejectingFunc).toHaveBeenCalledTimes(1);
-      expect(itemCompletedEventHandler).toHaveBeenCalledWith('1');
+      expect(itemCompletedEventHandler).toHaveBeenCalledWith(id1);
       expect(itemFailedEventHandler).toHaveBeenCalledTimes(2);
-      expect(itemFailedEventHandler).toHaveBeenCalledWith('2', error);
-      expect(itemFailedEventHandler).toHaveBeenCalledWith('3', new TimeoutError(`function timed out after ${OVERALL_TIMEOUT} ms`));
+      expect(itemFailedEventHandler).toHaveBeenCalledWith(id2, error);
+      expect(itemFailedEventHandler).toHaveBeenCalledWith(id3, new TimeoutError(`function timed out after ${OVERALL_TIMEOUT} ms`));
       expect(finishedEventHandler).toHaveBeenCalledWith('timedout');
     });
 
@@ -218,8 +254,8 @@ describe('registry', () => {
       registry.on('finished', finishedEventHandler);
 
       const timeoutFunc = fakeAsyncFuncGenerator(registryTimeout * 2, false);
-      registry.register({ func: timeoutFunc, id: '1', timeout: registryTimeout * 2 });
-      registry.register({ func: timeoutFunc, id: '2', timeout: registryTimeout * 2 });
+      registry.register({ func: timeoutFunc, id: '1', timeout: registryTimeout });
+      registry.register({ func: timeoutFunc, id: '2', timeout: registryTimeout });
 
       await expect(registry.trigger()).resolves.not.toThrow();
 
@@ -238,11 +274,11 @@ describe('registry', () => {
       registry.on('itemFailed', itemFailedEventHandler);
       registry.on('finished', finishedEventHandler);
 
-      await expect(registry.trigger({ shouldThrowIfPreErrors: true })).rejects.toThrow(error);
+      await expect(registry.trigger({ ignorePreError: false })).rejects.toThrow(error);
 
       expect(rejectingFunc).toHaveBeenCalledTimes(1);
       expect(itemFailedEventHandler).not.toHaveBeenCalled();
-      expect(finishedEventHandler).toHaveBeenCalledWith('preThrown');
+      expect(finishedEventHandler).toHaveBeenCalledWith('preFailed');
     });
 
     it('should throw error if post cleanup rejects and configured so', async function () {
@@ -253,11 +289,11 @@ describe('registry', () => {
       registry.on('itemFailed', itemFailedEventHandler);
       registry.on('finished', finishedEventHandler);
 
-      await expect(registry.trigger({ shouldThrowIfPostErrors: true })).rejects.toThrow(error);
+      await expect(registry.trigger({ ignorePostError: false })).rejects.toThrow(error);
 
       expect(rejectingFunc).toHaveBeenCalledTimes(1);
       expect(itemFailedEventHandler).not.toHaveBeenCalled();
-      expect(finishedEventHandler).toHaveBeenCalledWith('postThrown');
+      expect(finishedEventHandler).toHaveBeenCalledWith('postFailed');
     });
   });
 
@@ -296,20 +332,20 @@ describe('registry', () => {
       expect(itemCompletedEventHandler).toHaveBeenCalledWith(symbolId);
     });
 
-    it('should register item with function name as id', async function () {
+    it('should register item with random id', async function () {
       const registry = new CleanupRegistry();
 
       registry.on('itemFailed', itemFailedEventHandler);
       registry.on('itemCompleted', itemCompletedEventHandler);
 
       const resolvingFunc = jest.fn().mockResolvedValue(undefined);
-      registry.register({ func: resolvingFunc });
+      const id = registry.register({ func: resolvingFunc });
 
       await expect(registry.trigger()).resolves.not.toThrow();
 
       expect(resolvingFunc).toHaveBeenCalled();
       expect(itemFailedEventHandler).not.toHaveBeenCalled();
-      expect(itemCompletedEventHandler).toHaveBeenCalledWith(resolvingFunc.name);
+      expect(itemCompletedEventHandler).toHaveBeenCalledWith(id);
     });
 
     it('should not do anything if registering while on lock', async function () {
@@ -325,7 +361,7 @@ describe('registry', () => {
 
       await expect(registry.trigger()).resolves.not.toThrow();
 
-      registry.register({ func: rejectingFunc });
+      expect(() => registry.register({ func: rejectingFunc })).toThrow(AlreadyTriggeredError);
 
       expect(resolvingFunc).toHaveBeenCalled();
       expect(rejectingFunc).not.toHaveBeenCalled();
@@ -341,25 +377,24 @@ describe('registry', () => {
       registry.on('itemFailed', itemFailedEventHandler);
 
       const timeoutFunc = fakeAsyncFuncGenerator(registryTimeout * 2, false);
-      registry.register({ func: timeoutFunc });
+      const id = registry.register({ func: timeoutFunc });
 
       await expect(registry.trigger()).resolves.not.toThrow();
 
-      expect(itemFailedEventHandler).toHaveBeenCalledWith(timeoutFunc.name, new TimeoutError(`function timed out after ${registryTimeout} ms`));
+      expect(itemFailedEventHandler).toHaveBeenCalledWith(id, new TimeoutError(`function timed out after ${registryTimeout} ms`));
     });
 
-    it('should set the item timeout to be the not greater than the registry overall timeout', async function () {
+    it('should throw register error if item timeout is greater than the registry overall timeout', function () {
       const registryTimeout = OVERALL_TIMEOUT;
       const registry = new CleanupRegistry({ overallTimeout: registryTimeout });
 
       registry.on('itemFailed', itemFailedEventHandler);
 
       const timeoutFunc = fakeAsyncFuncGenerator(registryTimeout * 2, false);
-      registry.register({ func: timeoutFunc, timeout: registryTimeout * 2 });
+      const badOptions = { func: timeoutFunc, timeout: registryTimeout * 2 };
+      expect(() => registry.register(badOptions)).toThrow(RegisterError);
 
-      await expect(registry.trigger()).resolves.not.toThrow();
-
-      expect(itemFailedEventHandler).toHaveBeenCalledWith(timeoutFunc.name, new TimeoutError(`function timed out after ${registryTimeout} ms`));
+      expect(itemFailedEventHandler).not.toHaveBeenCalled();
     });
 
     it('should set the item timeout to given timeout', async function () {
@@ -369,26 +404,25 @@ describe('registry', () => {
       registry.on('itemFailed', itemFailedEventHandler);
 
       const timeoutFunc = fakeAsyncFuncGenerator(registryTimeout * 2, false);
-      registry.register({ func: timeoutFunc, timeout: registryTimeout / 2 });
+      const id = registry.register({ func: timeoutFunc, timeout: registryTimeout / 2 });
 
       await expect(registry.trigger()).resolves.not.toThrow();
 
-      expect(itemFailedEventHandler).toHaveBeenCalledWith(timeoutFunc.name, new TimeoutError(`function timed out after ${registryTimeout / 2} ms`));
+      expect(itemFailedEventHandler).toHaveBeenCalledWith(id, new TimeoutError(`function timed out after ${registryTimeout / 2} ms`));
     });
 
-    it('should set the item timeout after reject to be the not greater than the registry overall timeout', async function () {
+    it('should throw register error if item timeout after reject is greater than the registry overall timeout', function () {
       const registryTimeout = OVERALL_TIMEOUT;
       const registry = new CleanupRegistry({ overallTimeout: registryTimeout });
 
       registry.on('itemFailed', itemFailedEventHandler);
 
       const timeoutFunc = fakeAsyncFuncGenerator(100, false);
-      registry.register({ func: timeoutFunc, timeoutAfterFailure: registryTimeout * 2 });
 
-      await expect(registry.trigger()).resolves.not.toThrow();
+      const badOptions = { func: timeoutFunc, timeoutAfterFailure: registryTimeout * 2 };
 
-      expect(itemFailedEventHandler).toHaveBeenCalledTimes(1);
-      expect(itemFailedEventHandler).toHaveBeenCalledWith(timeoutFunc.name, new Error('internal promise rejected with undefined'));
+      expect(() => registry.register(badOptions)).toThrow(RegisterError);
+      expect(itemFailedEventHandler).not.toHaveBeenCalled();
     });
   });
 
@@ -444,7 +478,7 @@ describe('registry', () => {
 
       const itemId = 'someId';
       registry.register({ func: rejectingFunc, id: itemId });
-      registry.register({ func: rejectingFunc, timeoutAfterFailure: OVERALL_TIMEOUT });
+      const randomId = registry.register({ func: rejectingFunc, timeoutAfterFailure: OVERALL_TIMEOUT });
       registry.register({ func: anotherRejectingFunc, id: itemId, timeoutAfterFailure: OVERALL_TIMEOUT });
 
       registry.remove({ func: rejectingFunc, id: itemId });
@@ -452,12 +486,12 @@ describe('registry', () => {
       await expect(registry.trigger()).resolves.not.toThrow();
 
       expect(itemFailedEventHandler).toHaveBeenCalledTimes(2);
-      expect(itemFailedEventHandler).toHaveBeenCalledWith(rejectingFunc.name, error);
+      expect(itemFailedEventHandler).toHaveBeenCalledWith(randomId, error);
       expect(itemFailedEventHandler).toHaveBeenCalledWith(itemId, error);
       expect(finishedEventHandler).toHaveBeenCalledTimes(1);
     });
 
-    it('should lock the registry after trigger and not remove any functions', async function () {
+    it('should throw error if remove is called on a triggered registry', async function () {
       const registry = new CleanupRegistry();
 
       registry.on('itemCompleted', itemCompletedEventHandler);
@@ -468,7 +502,7 @@ describe('registry', () => {
 
       await expect(registry.trigger()).resolves.not.toThrow();
 
-      registry.remove({ func: resolvingFunc });
+      expect(() => registry.remove({ func: resolvingFunc })).toThrow(AlreadyTriggeredError);
 
       expect(resolvingFunc).toHaveBeenCalled();
       expect(itemCompletedEventHandler).toHaveBeenCalled();
@@ -499,7 +533,7 @@ describe('registry', () => {
       expect(finishedEventHandler).toHaveBeenCalledWith('success');
     });
 
-    it('should lock the registry until cleared', async function () {
+    it('should throw error if registry have already been triggered until its cleared', async function () {
       const registry = new CleanupRegistry();
 
       registry.on('itemCompleted', itemCompletedEventHandler);
@@ -515,9 +549,9 @@ describe('registry', () => {
       expect(finishedEventHandler).toHaveBeenNthCalledWith(1, 'success');
 
       const anotherResolvingFunc = jest.fn().mockResolvedValue(undefined);
-      registry.register({ func: anotherResolvingFunc });
+      expect(() => registry.register({ func: anotherResolvingFunc })).toThrow(AlreadyTriggeredError);
 
-      await expect(registry.trigger()).resolves.not.toThrow();
+      await expect(registry.trigger()).rejects.toThrow(AlreadyTriggeredError);
       expect(anotherResolvingFunc).not.toHaveBeenCalled();
       expect(finishedEventHandler).toHaveBeenCalledTimes(1);
 

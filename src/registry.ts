@@ -1,17 +1,18 @@
 import { TypedEmitter } from 'tiny-typed-emitter';
-import { DAFAULT_TIMEOUT_AFTER_FAILURE, DEFAULT_OVERALL_TIMEOUT, DEFAULT_TRIGGER_OPTIONS } from './common/constants';
-import { TimeoutError } from './common/errors';
+import { nanoid } from 'nanoid';
+import { DEFAULT_TIMEOUT_AFTER_FAILURE, DEFAULT_OVERALL_TIMEOUT, DEFAULT_TRIGGER_OPTIONS } from './common/constants';
+import { AlreadyTriggeredError, RegisterError, TimeoutError } from './common/errors';
 import { delay, promiseResult, promiseTimeout } from './common/util';
 import { CleanupItem, RegistryEvents, RegistryOptions, TriggerOptions } from './common/interfaces';
-import { AsyncFunc, FinishStatus, RegisterOptions, RemoveItem } from './common/types';
+import { AsyncFunc, FinishStatus, ItemId, RegisterOptions, RemoveItem } from './common/types';
 
 export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
+  public hasTriggered = false;
   private readonly preCleanup?: AsyncFunc;
   private readonly postCleanup?: AsyncFunc;
   private readonly overallTimeout: number;
 
   private registry: CleanupItem[] = [];
-  private hasTriggered = false;
   private overallExpired = false;
   private overallExpireTimer: NodeJS.Timer | undefined;
 
@@ -22,31 +23,41 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
     this.overallTimeout = registryOptions?.overallTimeout ?? DEFAULT_OVERALL_TIMEOUT;
   }
 
-  public register(registerItem: RegisterOptions): void {
+  public register(options: RegisterOptions): ItemId {
     if (this.hasTriggered) {
-      return;
+      throw new AlreadyTriggeredError();
     }
 
-    const { func, id, timeout, timeoutAfterFailure } = registerItem;
+    const { func, id, timeout, timeoutAfterFailure } = options;
 
-    const itemId = id !== undefined ? id : func.name;
+    const itemId = id !== undefined ? id : nanoid();
 
     let itemTimeout = this.overallTimeout;
     if (timeout !== undefined) {
-      itemTimeout = timeout < this.overallTimeout ? timeout : this.overallTimeout;
+      if (timeout > this.overallTimeout) {
+        throw new RegisterError(`given item timeout ${timeout} is greater than overall cleanup registry timeout ${this.overallTimeout}`);
+      }
+      itemTimeout = timeout;
     }
 
-    let itemTimeoutAfterFailure = DAFAULT_TIMEOUT_AFTER_FAILURE;
+    let itemTimeoutAfterFailure = DEFAULT_TIMEOUT_AFTER_FAILURE;
     if (timeoutAfterFailure !== undefined) {
-      itemTimeoutAfterFailure = timeoutAfterFailure < this.overallTimeout ? timeoutAfterFailure : this.overallTimeout;
+      if (timeoutAfterFailure > this.overallTimeout) {
+        throw new RegisterError(
+          `given item timeoutAfterFailure ${timeoutAfterFailure} is greater than overall cleanup registry timeout ${this.overallTimeout}`
+        );
+      }
+      itemTimeoutAfterFailure = timeoutAfterFailure;
     }
 
     this.registry.push({ func, id: itemId, timeout: itemTimeout, timeoutAfterFailure: itemTimeoutAfterFailure });
+
+    return itemId;
   }
 
   public remove(removeItem: RemoveItem): void {
     if (this.hasTriggered) {
-      return;
+      throw new AlreadyTriggeredError();
     }
 
     const { func: funcForRemoval, id: funcIdForRemoval } = removeItem;
@@ -65,10 +76,10 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
 
   public async trigger(triggerOptions: TriggerOptions = DEFAULT_TRIGGER_OPTIONS): Promise<void> {
     if (this.hasTriggered) {
-      return;
+      throw new AlreadyTriggeredError();
     }
 
-    const { shouldThrowIfPreErrors, shouldThrowIfPostErrors } = triggerOptions;
+    const { ignorePreError, ignorePostError } = triggerOptions;
     this.hasTriggered = true;
 
     this.emit('started');
@@ -77,8 +88,8 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
 
     if (this.preCleanup) {
       const [preErr] = await promiseResult(this.preCleanup());
-      if (preErr !== undefined && shouldThrowIfPreErrors === true) {
-        this.finish('preThrown');
+      if (preErr !== undefined && ignorePreError === false) {
+        this.finish('preFailed');
         throw preErr;
       }
     }
@@ -87,8 +98,8 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
 
     if (this.postCleanup) {
       const [postErr] = await promiseResult(this.postCleanup());
-      if (postErr !== undefined && shouldThrowIfPostErrors === true) {
-        this.finish('postThrown');
+      if (postErr !== undefined && ignorePostError === false) {
+        this.finish('postFailed');
         throw postErr;
       }
     }
@@ -110,21 +121,23 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
 
   private async cleanup(): Promise<void> {
     const cleanupPromises = this.registry.map(async (item) => {
-      let error: unknown;
+      let itemCompleted = false;
 
-      do {
+      while (!itemCompleted && !this.overallExpired) {
         const timeoutFunction = promiseTimeout(item.func(), item.timeout);
 
-        [error] = await promiseResult(timeoutFunction);
+        const [error] = await promiseResult(timeoutFunction);
 
         if (error !== undefined) {
           this.emit('itemFailed', item.id, error);
-          const delayMs = error instanceof TimeoutError ? DAFAULT_TIMEOUT_AFTER_FAILURE : item.timeoutAfterFailure;
-          await delay(delayMs);
+          if (!(error instanceof TimeoutError)) {
+            await delay(item.timeoutAfterFailure);
+          }
         } else {
+          itemCompleted = true;
           this.emit('itemCompleted', item.id);
         }
-      } while (error !== undefined && !this.overallExpired);
+      }
     });
 
     await Promise.allSettled(cleanupPromises);
