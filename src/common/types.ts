@@ -13,4 +13,4 @@ export type RegisterOptions = Partial<CleanupItem> & Pick<CleanupItem, 'func'>;
 
 export type RemoveItem = RequireAtLeastOne<BaseItem>;
 
-export type FinishStatus = 'success' | 'timedout' | 'preFailed' | 'postFailed';
+export type FinishStatus = 'success' | 'timeout' | 'preFailed' | 'postFailed';

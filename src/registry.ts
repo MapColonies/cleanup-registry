@@ -7,7 +7,7 @@ import { CleanupItem, RegistryEvents, RegistryOptions, TriggerOptions } from './
 import { AsyncFunc, FinishStatus, ItemId, RegisterOptions, RemoveItem } from './common/types';
 
 export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
-  public hasTriggered = false;
+  private hasTriggered = false;
   private readonly preCleanup?: AsyncFunc;
   private readonly postCleanup?: AsyncFunc;
   private readonly overallTimeout: number;
@@ -21,6 +21,10 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
     this.preCleanup = registryOptions?.preCleanup;
     this.postCleanup = registryOptions?.postCleanup;
     this.overallTimeout = registryOptions?.overallTimeout ?? DEFAULT_OVERALL_TIMEOUT;
+  }
+
+  public get hasAlreadyTriggered(): boolean {
+    return this.hasTriggered;
   }
 
   public register(options: RegisterOptions): ItemId {
@@ -96,7 +100,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
 
     await this.cleanup();
 
-    if (this.postCleanup) {
+    if (this.postCleanup && !this.overallExpired) {
       const [postErr] = await promiseResult(this.postCleanup());
       if (postErr !== undefined && ignorePostError === false) {
         this.finish('postFailed');
@@ -104,7 +108,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
       }
     }
 
-    this.finish(this.overallExpired ? 'timedout' : 'success');
+    this.finish(this.overallExpired ? 'timeout' : 'success');
   }
 
   public clear(): void {
