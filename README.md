@@ -7,7 +7,7 @@ npm i cleanup-registry
 ```
 
 # Usage
-1. create you registry with wished options
+1. create your registry with wished options
 ```ts
 const registry = new CleanupRegistry({
       overallTimeout: 3000,
@@ -26,7 +26,7 @@ registry.on('itemFailed', (id, error, message) => logger.error({ err: error, msg
 registry.on('finished', (status) =>
     status === 'success' ?
     logger.info(`finished successfully`) :
-    logger.error({ msg: `finished with error`, status }));
+    logger.error({ msg: `finished with bad status`, status }));
 ```
 
 3. register your async functions
