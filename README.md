@@ -48,7 +48,7 @@ await registry.trigger();
 ```
 
 ## How it works
-the cleanup trigger as a whole:
+The cleanup process as a whole:
 ```mermaid
 flowchart LR
     A[Triggered] -->B{already triggered?}
@@ -72,7 +72,7 @@ flowchart LR
     N -->|yes| P
 ```
 
-single item in the registry cleanup loop:
+Cleaning up the registry will result in each item independent cleanup loop:
 ```mermaid
 flowchart TB
     A{Overall Expired?}
