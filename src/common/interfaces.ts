@@ -1,8 +1,8 @@
 import { AsyncFunc, ItemId, FinishStatus } from './types';
 
 export interface RegistryOptions {
-  preCleanup?: AsyncFunc;
-  postCleanup?: AsyncFunc;
+  preCleanupHook?: AsyncFunc;
+  postCleanupHook?: AsyncFunc;
   overallTimeout?: number;
 }
 

@@ -143,7 +143,7 @@ describe('registry', () => {
     it('should emit a finished success event if registry is empty and call pre and post cleanups', async function () {
       const resolvingFunc = jest.fn().mockResolvedValue(undefined);
 
-      const registry = new CleanupRegistry({ preCleanup: resolvingFunc, postCleanup: resolvingFunc });
+      const registry = new CleanupRegistry({ preCleanupHook: resolvingFunc, postCleanupHook: resolvingFunc });
 
       registry.on('itemFailed', itemFailedEventHandler);
       registry.on('itemCompleted', itemFailedEventHandler);
@@ -162,7 +162,7 @@ describe('registry', () => {
       const resolvingPostCleanup = jest.fn().mockResolvedValue(undefined);
       const resolvingFunc = jest.fn().mockResolvedValue(undefined);
 
-      const registry = new CleanupRegistry({ preCleanup: rejectingPreCleanup, postCleanup: resolvingPostCleanup });
+      const registry = new CleanupRegistry({ preCleanupHook: rejectingPreCleanup, postCleanupHook: resolvingPostCleanup });
 
       registry.on('itemFailed', itemFailedEventHandler);
       registry.on('finished', finishedEventHandler);
@@ -269,7 +269,7 @@ describe('registry', () => {
     it('should throw error if pre cleanup rejects and configured so', async function () {
       const error = new Error('pre cleanup error');
       const rejectingFunc = jest.fn().mockRejectedValue(error);
-      const registry = new CleanupRegistry({ preCleanup: rejectingFunc });
+      const registry = new CleanupRegistry({ preCleanupHook: rejectingFunc });
 
       registry.on('itemFailed', itemFailedEventHandler);
       registry.on('finished', finishedEventHandler);
@@ -284,7 +284,7 @@ describe('registry', () => {
     it('should throw error if post cleanup rejects and configured so', async function () {
       const error = new Error('post cleanup error');
       const rejectingFunc = jest.fn().mockRejectedValue(error);
-      const registry = new CleanupRegistry({ postCleanup: rejectingFunc });
+      const registry = new CleanupRegistry({ postCleanupHook: rejectingFunc });
 
       registry.on('itemFailed', itemFailedEventHandler);
       registry.on('finished', finishedEventHandler);

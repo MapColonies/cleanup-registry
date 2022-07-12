@@ -8,8 +8,8 @@ import { AsyncFunc, FinishStatus, ItemId, RegisterOptions, RemoveItem } from './
 
 export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   private hasTriggered = false;
-  private readonly preCleanup?: AsyncFunc;
-  private readonly postCleanup?: AsyncFunc;
+  private readonly preCleanupHook?: AsyncFunc;
+  private readonly postCleanupHook?: AsyncFunc;
   private readonly overallTimeout: number;
 
   private registry: CleanupItem[] = [];
@@ -18,8 +18,8 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
 
   public constructor(registryOptions?: RegistryOptions) {
     super();
-    this.preCleanup = registryOptions?.preCleanup;
-    this.postCleanup = registryOptions?.postCleanup;
+    this.preCleanupHook = registryOptions?.preCleanupHook;
+    this.postCleanupHook = registryOptions?.postCleanupHook;
     this.overallTimeout = registryOptions?.overallTimeout ?? DEFAULT_OVERALL_TIMEOUT;
   }
 
@@ -90,8 +90,8 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
 
     this.initCleanupExpiredTimer();
 
-    if (this.preCleanup) {
-      const [preErr] = await promiseResult(this.preCleanup());
+    if (this.preCleanupHook) {
+      const [preErr] = await promiseResult(this.preCleanupHook());
       if (preErr !== undefined && ignorePreError === false) {
         this.finish('preFailed');
         throw preErr;
@@ -100,8 +100,8 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
 
     await this.cleanup();
 
-    if (this.postCleanup && !this.overallExpired) {
-      const [postErr] = await promiseResult(this.postCleanup());
+    if (this.postCleanupHook && !this.overallExpired) {
+      const [postErr] = await promiseResult(this.postCleanupHook());
       if (postErr !== undefined && ignorePostError === false) {
         this.finish('postFailed');
         throw postErr;
