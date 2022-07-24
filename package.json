@@ -1,11 +1,10 @@
 {
-  "name": "@map-colonies/ts-npm-package-boilerplate",
-  "version": "1.0.2",
-  "description": "This is template for map colonies typescript packages",
+  "name": "@map-colonies/cleanup-registry",
+  "version": "1.0.0",
+  "description": "This is a package for safe service cleanup",
   "main": "./dist/index.js",
   "scripts": {
     "test:unit": "jest --config=./tests/configurations/unit/jest.config.js",
-    "test:integration": "jest --config=./tests/configurations/integration/jest.config.js",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "prelint:fix": "npm run format:fix",
@@ -13,7 +12,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
     "release": "standard-version",
-    "test": "npm run test:unit && npm run test:integration",
+    "test": "npm run test:unit",
     "prebuild": "npm run clean",
     "build": "tsc --project tsconfig.build.json",
     "start": "npm run build && cd dist && node ./index.js",
@@ -22,12 +21,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MapColonies/ts-npm-package-boilerplate.git"
+    "url": "git+https://github.com/MapColonies/cleanup-registry.git"
   },
   "author": "MapColonies",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/MapColonies/ts-npm-package-boilerplate/issues"
+    "url": "https://github.com/MapColonies/cleanup-registry/issues"
   },
   "husky": {
     "hooks": {
@@ -38,27 +37,31 @@
   "files": [
     "dist/**/*"
   ],
-  "homepage": "https://github.com/MapColonies/ts-npm-package-boilerplate#readme",
+  "homepage": "https://github.com/MapColonies/cleanup-registry#readme",
+  "dependencies": {
+    "nanoid": "^3.3.4",
+    "tiny-typed-emitter": "^2.1.0"
+  },
   "devDependencies": {
-    "@commitlint/cli": "^11.0.0",
-    "@commitlint/config-conventional": "^11.0.0",
-    "@map-colonies/eslint-config": "^2.2.0",
-    "@map-colonies/prettier-config": "0.0.1",
-    "@types/jest": "^26.0.19",
-    "@types/node": "^14.14.12",
-    "commitlint": "^11.0.0",
+    "@commitlint/cli": "^13.2.1",
+    "@commitlint/config-conventional": "^13.2.0",
+    "@map-colonies/eslint-config": "^3.1.1",
+    "@map-colonies/prettier-config": "^0.0.1",
+    "@types/jest": "^27.0.2",
+    "@types/node": "^18.0.0",
+    "commitlint": "^13.2.1",
     "cz-conventional-changelog": "^3.3.0",
-    "eslint": "^7.8.1",
-    "husky": "^4.3.5",
-    "jest": "^26.6.3",
+    "eslint": "^8.15.0",
+    "husky": "^7.0.2",
+    "jest": "^27.3.1",
     "jest-create-mock-instance": "^1.1.0",
-    "jest-html-reporters": "^2.1.2",
-    "prettier": "^2.2.1",
-    "pretty-quick": "^3.1.0",
-    "standard-version": "^9.3.0",
-    "ts-jest": "^26.4.4",
+    "jest-html-reporters": "^2.1.6",
+    "prettier": "^2.4.1",
+    "pretty-quick": "^3.1.1",
+    "standard-version": "^9.3.2",
+    "ts-jest": "^27.0.7",
     "ts-node": "^9.1.1",
-    "typedoc": "^0.20.36",
-    "typescript": "^4.2.4"
+    "typedoc": "^0.23.7",
+    "typescript": "^4.7.0"
   }
 }

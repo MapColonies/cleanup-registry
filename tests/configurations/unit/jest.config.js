@@ -4,11 +4,10 @@ module.exports = {
   },
   testMatch: ['<rootDir>/tests/unit/**/*.spec.ts'],
   collectCoverage: true,
-  collectCoverageFrom: ['<rootDir>/src/**/*.ts', '!**/node_modules/**', '!**/vendor/**'],
+  collectCoverageFrom: ['<rootDir>/src/**/*.ts', '!**/node_modules/**', '!**/vendor/**', '!**/index.ts'],
   coverageDirectory: '<rootDir>/coverage',
-  coverageReporters: ['text-summary', 'html', 'json'],
+  coverageReporters: ['text', 'html'],
   rootDir: '../../../.',
-  setupFiles: ['<rootDir>/tests/configurations/jest.setup.js'],
   preset: 'ts-jest',
   testEnvironment: 'node',
   reporters: [
