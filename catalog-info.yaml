@@ -1,0 +1,15 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: cleanup-registry
+  description: A package for calling async functions to be resolved in a configured loop
+  annotations:
+    github.com/project-slug: MapColonies/cleanup-registry
+  tags: 
+    - nodejs
+    - typescript
+spec:
+  type: library
+  lifecycle: production
+  owner: DevInfra
+  system: npm-packages
