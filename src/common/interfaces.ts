@@ -1,9 +1,11 @@
+import { Logger } from '@map-colonies/js-logger';
 import { AsyncFunc, ItemId, FinishStatus } from './types';
 
 export interface RegistryOptions {
   preCleanupHook?: AsyncFunc;
   postCleanupHook?: AsyncFunc;
   overallTimeout?: number;
+  logger?: Logger;
 }
 
 export interface TriggerOptions {
