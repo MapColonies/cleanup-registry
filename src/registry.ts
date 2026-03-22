@@ -1,10 +1,9 @@
 import { TypedEmitter } from 'tiny-typed-emitter';
 import { nanoid } from 'nanoid';
-import { type Logger } from '@map-colonies/js-logger';
 import { DEFAULT_TIMEOUT_AFTER_FAILURE, DEFAULT_OVERALL_TIMEOUT, DEFAULT_TRIGGER_OPTIONS } from './common/constants';
 import { AlreadyTriggeredError, RegisterError, TimeoutError } from './common/errors';
 import { delay, promiseResult, promiseTimeout } from './common/util';
-import { CleanupItem, RegistryEvents, RegistryOptions, TriggerOptions } from './common/interfaces';
+import { CleanupItem, ILogger, RegistryEvents, RegistryOptions, TriggerOptions } from './common/interfaces';
 import { AsyncFunc, FinishStatus, ItemId, RegisterOptions, RemoveItem } from './common/types';
 
 export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
@@ -12,11 +11,11 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   private readonly preCleanupHook?: AsyncFunc;
   private readonly postCleanupHook?: AsyncFunc;
   private readonly overallTimeout: number;
-  private readonly logger?: Logger;
+  private readonly logger?: ILogger;
 
   private registry: CleanupItem[] = [];
   private overallExpired = false;
-  private overallExpireTimer: ReturnType<typeof setTimeout> | undefined;
+  private overallExpireTimer: NodeJS.Timeout | undefined;
 
   public constructor(registryOptions?: RegistryOptions) {
     super();
@@ -91,7 +90,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
     this.hasTriggered = true;
 
     this.emit('started');
-    this.logger?.info('Cleanup registry started');
+    this.logger?.info({ msg: 'CLEANUP REGISTRY STARTED' });
 
     this.initCleanupExpiredTimer();
 
@@ -99,7 +98,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
       const [preErr] = await promiseResult(this.preCleanupHook());
       if (preErr !== undefined && ignorePreError === false) {
         this.finish('preFailed');
-        throw preErr instanceof Error ? preErr : new Error(String(preErr));
+        throw preErr as Error;
       }
     }
 
@@ -109,7 +108,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
       const [postErr] = await promiseResult(this.postCleanupHook());
       if (postErr !== undefined && ignorePostError === false) {
         this.finish('postFailed');
-        throw postErr instanceof Error ? postErr : new Error(String(postErr));
+        throw postErr as Error;
       }
     }
 
@@ -126,12 +125,13 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   private finish(status: FinishStatus): void {
     clearTimeout(this.overallExpireTimer);
     this.emit('finished', status);
-    this.logger?.info(`Cleanup registry finished with status: ${status}`);
+    this.logger?.info({ msg: `CLEANUP REGISTRY FINISHED WITH STATUS ${status}` });
   }
 
   private async cleanup(): Promise<void> {
     const cleanupPromises = this.registry.map(async (item) => {
       let itemCompleted = false;
+
       while (!itemCompleted && !this.overallExpired) {
         const timeoutFunction = promiseTimeout(item.func(), item.timeout);
 
@@ -139,13 +139,13 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
 
         if (error !== undefined) {
           this.emit('itemFailed', item.id, error);
-          this.logger?.error({ msg: 'item failed', id: item.id, error });
+          this.logger?.error({ msg: 'ITEM CLEANUP FAILED', id: item.id, error });
           if (!(error instanceof TimeoutError)) {
             await delay(item.timeoutAfterFailure);
           }
         } else {
           itemCompleted = true;
-          this.logger?.info({ itemId: item.id, msg: 'cleanup finished for item' });
+          this.logger?.info({ itemId: item.id, msg: 'ITEM CLEANUP COMPLETED' });
           this.emit('itemCompleted', item.id);
         }
       }
