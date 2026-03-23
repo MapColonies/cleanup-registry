@@ -112,7 +112,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
         this.logger?.error({ msg: 'PRE-CLEANUP HOOK FAILED', ignorePreError, error: preErr });
         if (ignorePreError === false) {
           this.finish('preFailed');
-          throw preErr as Error;
+          throw preErr;
         }
       }
     }
@@ -125,7 +125,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
         this.logger?.error({ msg: 'POST-CLEANUP HOOK FAILED', ignorePostError, error: postErr });
         if (ignorePostError === false) {
           this.finish('postFailed');
-          throw postErr as Error;
+          throw postErr;
         }
       }
     }
