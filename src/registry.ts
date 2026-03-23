@@ -42,7 +42,9 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
     let itemTimeout = this.overallTimeout;
     if (timeout !== undefined) {
       if (timeout > this.overallTimeout) {
-        throw new RegisterError(`given item timeout ${timeout} is greater than overall cleanup registry timeout ${this.overallTimeout}`);
+        const error = new RegisterError(`given item timeout ${timeout} is greater than overall cleanup registry timeout ${this.overallTimeout}`);
+        this.logger?.error({ msg: 'REGISTER FAILED', itemId, itemTimeout: timeout, overallTimeout: this.overallTimeout, error });
+        throw error;
       }
       itemTimeout = timeout;
     }
@@ -50,14 +52,24 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
     let itemTimeoutAfterFailure = DEFAULT_TIMEOUT_AFTER_FAILURE;
     if (timeoutAfterFailure !== undefined) {
       if (timeoutAfterFailure > this.overallTimeout) {
-        throw new RegisterError(
+        const error = new RegisterError(
           `given item timeoutAfterFailure ${timeoutAfterFailure} is greater than overall cleanup registry timeout ${this.overallTimeout}`
         );
+        this.logger?.error({
+          msg: 'REGISTER FAILED',
+          itemId,
+          itemTimeoutAfterFailure: timeoutAfterFailure,
+          overallTimeout: this.overallTimeout,
+          error,
+        });
+        throw error;
       }
       itemTimeoutAfterFailure = timeoutAfterFailure;
     }
 
     this.registry.push({ func, id: itemId, timeout: itemTimeout, timeoutAfterFailure: itemTimeoutAfterFailure });
+
+    this.logger?.debug({ msg: 'ITEM REGISTERED', itemId, itemTimeout, itemTimeoutAfterFailure, registrySize: this.registry.length });
 
     return itemId;
   }
@@ -90,15 +102,18 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
     this.hasTriggered = true;
 
     this.emit('started');
-    this.logger?.info({ msg: 'CLEANUP REGISTRY STARTED' });
+    this.logger?.info({ msg: 'CLEANUP REGISTRY STARTED', overallTimeout: this.overallTimeout, registrySize: this.registry.length });
 
     this.initCleanupExpiredTimer();
 
     if (this.preCleanupHook) {
       const [preErr] = await promiseResult(this.preCleanupHook());
-      if (preErr !== undefined && ignorePreError === false) {
-        this.finish('preFailed');
-        throw preErr as Error;
+      if (preErr !== undefined) {
+        this.logger?.error({ msg: 'PRE-CLEANUP HOOK FAILED', ignorePreError, error: preErr });
+        if (ignorePreError === false) {
+          this.finish('preFailed');
+          throw preErr as Error;
+        }
       }
     }
 
@@ -106,9 +121,12 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
 
     if (this.postCleanupHook && !this.overallExpired) {
       const [postErr] = await promiseResult(this.postCleanupHook());
-      if (postErr !== undefined && ignorePostError === false) {
-        this.finish('postFailed');
-        throw postErr as Error;
+      if (postErr !== undefined) {
+        this.logger?.error({ msg: 'POST-CLEANUP HOOK FAILED', ignorePostError, error: postErr });
+        if (ignorePostError === false) {
+          this.finish('postFailed');
+          throw postErr as Error;
+        }
       }
     }
 
@@ -116,6 +134,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   }
 
   public clear(): void {
+    this.logger?.debug({ msg: 'CLEANUP REGISTRY CLEARED', registrySize: this.registry.length });
     this.registry = [];
     this.hasTriggered = false;
     this.overallExpired = false;
@@ -125,7 +144,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   private finish(status: FinishStatus): void {
     clearTimeout(this.overallExpireTimer);
     this.emit('finished', status);
-    this.logger?.info({ msg: `CLEANUP REGISTRY FINISHED WITH STATUS ${status}` });
+    this.logger?.info({ msg: 'CLEANUP REGISTRY FINISHED', status });
   }
 
   private async cleanup(): Promise<void> {
@@ -139,13 +158,19 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
 
         if (error !== undefined) {
           this.emit('itemFailed', item.id, error);
-          this.logger?.error({ msg: 'ITEM CLEANUP FAILED', id: item.id, error });
+          this.logger?.error({
+            msg: 'ITEM CLEANUP FAILED',
+            itemId: item.id,
+            itemTimeout: item.timeout,
+            itemTimeoutAfterFailure: item.timeoutAfterFailure,
+            error,
+          });
           if (!(error instanceof TimeoutError)) {
             await delay(item.timeoutAfterFailure);
           }
         } else {
           itemCompleted = true;
-          this.logger?.info({ itemId: item.id, msg: 'ITEM CLEANUP COMPLETED' });
+          this.logger?.info({ msg: 'ITEM CLEANUP COMPLETED', itemId: item.id });
           this.emit('itemCompleted', item.id);
         }
       }
@@ -157,6 +182,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   private initCleanupExpiredTimer(): void {
     this.overallExpireTimer = setTimeout(() => {
       this.overallExpired = true;
+      this.logger?.warn({ msg: 'OVERALL TIMEOUT EXPIRED', overallTimeout: this.overallTimeout });
     }, this.overallTimeout);
   }
 }
