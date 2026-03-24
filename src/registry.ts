@@ -43,7 +43,13 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
     if (timeout !== undefined) {
       if (timeout > this.overallTimeout) {
         const error = new RegisterError(`given item timeout ${timeout} is greater than overall cleanup registry timeout ${this.overallTimeout}`);
-        this.logger?.error({ msg: 'REGISTER FAILED', itemId, itemTimeout: timeout, overallTimeout: this.overallTimeout, error });
+        this.logger?.error({
+          msg: 'an error occurred during item registration: timeout is greater than the registry overallTimeout',
+          itemId,
+          itemTimeout: timeout,
+          overallTimeout: this.overallTimeout,
+          err: error,
+        });
         throw error;
       }
       itemTimeout = timeout;
@@ -56,11 +62,11 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
           `given item timeoutAfterFailure ${timeoutAfterFailure} is greater than overall cleanup registry timeout ${this.overallTimeout}`
         );
         this.logger?.error({
-          msg: 'REGISTER FAILED',
+          msg: 'an error occurred during item registration: timeoutAfterFailure is greater than the registry overallTimeout',
           itemId,
           itemTimeoutAfterFailure: timeoutAfterFailure,
           overallTimeout: this.overallTimeout,
-          error,
+          err: error,
         });
         throw error;
       }
@@ -69,7 +75,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
 
     this.registry.push({ func, id: itemId, timeout: itemTimeout, timeoutAfterFailure: itemTimeoutAfterFailure });
 
-    this.logger?.debug({ msg: 'ITEM REGISTERED', itemId, itemTimeout, itemTimeoutAfterFailure, registrySize: this.registry.length });
+    this.logger?.debug({ msg: 'item registered successfully', itemId, itemTimeout, itemTimeoutAfterFailure, registrySize: this.registry.length });
 
     return itemId;
   }
@@ -102,14 +108,14 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
     this.hasTriggered = true;
 
     this.emit('started');
-    this.logger?.info({ msg: 'CLEANUP REGISTRY STARTED', overallTimeout: this.overallTimeout, registrySize: this.registry.length });
+    this.logger?.info({ msg: 'cleanup registry started', overallTimeout: this.overallTimeout, registrySize: this.registry.length });
 
     this.initCleanupExpiredTimer();
 
     if (this.preCleanupHook) {
       const [preErr] = await promiseResult(this.preCleanupHook());
       if (preErr !== undefined) {
-        this.logger?.error({ msg: 'PRE-CLEANUP HOOK FAILED', ignorePreError, error: preErr });
+        this.logger?.error({ msg: 'an error occurred while executing the pre-cleanup hook', ignorePreError, err: preErr });
         if (ignorePreError === false) {
           this.finish('preFailed');
           throw preErr as Error;
@@ -122,7 +128,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
     if (this.postCleanupHook && !this.overallExpired) {
       const [postErr] = await promiseResult(this.postCleanupHook());
       if (postErr !== undefined) {
-        this.logger?.error({ msg: 'POST-CLEANUP HOOK FAILED', ignorePostError, error: postErr });
+        this.logger?.error({ msg: 'an error occurred while executing the post-cleanup hook', ignorePostError, err: postErr });
         if (ignorePostError === false) {
           this.finish('postFailed');
           throw postErr as Error;
@@ -134,7 +140,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   }
 
   public clear(): void {
-    this.logger?.debug({ msg: 'CLEANUP REGISTRY CLEARED', registrySize: this.registry.length });
+    this.logger?.debug({ msg: 'cleanup registry cleared', registrySize: this.registry.length });
     this.registry = [];
     this.hasTriggered = false;
     this.overallExpired = false;
@@ -144,7 +150,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   private finish(status: FinishStatus): void {
     clearTimeout(this.overallExpireTimer);
     this.emit('finished', status);
-    this.logger?.info({ msg: 'CLEANUP REGISTRY FINISHED', status });
+    this.logger?.info({ msg: 'cleanup registry finished', status });
   }
 
   private async cleanup(): Promise<void> {
@@ -159,18 +165,18 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
         if (error !== undefined) {
           this.emit('itemFailed', item.id, error);
           this.logger?.error({
-            msg: 'ITEM CLEANUP FAILED',
+            msg: 'an error occurred while executing item cleanup',
             itemId: item.id,
             itemTimeout: item.timeout,
             itemTimeoutAfterFailure: item.timeoutAfterFailure,
-            error,
+            err: error,
           });
           if (!(error instanceof TimeoutError)) {
             await delay(item.timeoutAfterFailure);
           }
         } else {
           itemCompleted = true;
-          this.logger?.info({ msg: 'ITEM CLEANUP COMPLETED', itemId: item.id });
+          this.logger?.info({ msg: 'item cleanup completed successfully', itemId: item.id });
           this.emit('itemCompleted', item.id);
         }
       }
@@ -182,7 +188,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   private initCleanupExpiredTimer(): void {
     this.overallExpireTimer = setTimeout(() => {
       this.overallExpired = true;
-      this.logger?.warn({ msg: 'OVERALL TIMEOUT EXPIRED', overallTimeout: this.overallTimeout });
+      this.logger?.warn({ msg: 'cleanup registry overall timeout expired', overallTimeout: this.overallTimeout });
     }, this.overallTimeout);
   }
 }
