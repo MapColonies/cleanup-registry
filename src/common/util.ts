@@ -1,16 +1,16 @@
 import { TimeoutError } from './errors';
 
-export const promiseResult = async <T>(promise: Promise<T>): Promise<[undefined, T] | [Error, undefined]> => {
+export const promiseResult = async <T>(promise: Promise<T>): Promise<[undefined, T] | [unknown, undefined]> => {
   try {
     const value = await promise;
     return [undefined, value];
   } catch (error) {
-    return [error instanceof Error ? error : new Error('internal promise rejected with undefined'), undefined];
+    return [error !== undefined ? error : new Error('internal promise rejected with undefined'), undefined];
   }
 };
 
 export const promiseTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: NodeJS.Timeout | undefined;
 
   const timeout = new Promise<T>((_, reject) => {
     timer = setTimeout(() => {
