@@ -75,7 +75,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
 
     this.registry.push({ func, id: itemId, timeout: itemTimeout, timeoutAfterFailure: itemTimeoutAfterFailure });
 
-    this.logger?.debug({ msg: 'item registered successfully', itemId, itemTimeout, itemTimeoutAfterFailure, registrySize: this.registry.length });
+    this.logger?.debug({ msg: 'item registered successfully', itemId, itemTimeout, itemTimeoutAfterFailure });
 
     return itemId;
   }
@@ -113,6 +113,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
     this.initCleanupExpiredTimer();
 
     if (this.preCleanupHook) {
+      this.logger?.debug({ msg: 'executing pre-cleanup hook' });
       const [preErr] = await promiseResult(this.preCleanupHook());
       if (preErr !== undefined) {
         this.logger?.error({ msg: 'an error occurred while executing the pre-cleanup hook', ignorePreError, err: preErr });
@@ -126,6 +127,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
     await this.cleanup();
 
     if (this.postCleanupHook && !this.overallExpired) {
+      this.logger?.debug({ msg: 'executing post-cleanup hook' });
       const [postErr] = await promiseResult(this.postCleanupHook());
       if (postErr !== undefined) {
         this.logger?.error({ msg: 'an error occurred while executing the post-cleanup hook', ignorePostError, err: postErr });
@@ -140,7 +142,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   }
 
   public clear(): void {
-    this.logger?.debug({ msg: 'cleanup registry cleared', registrySize: this.registry.length });
+    this.logger?.debug({ msg: 'cleanup registry cleared' });
     this.registry = [];
     this.hasTriggered = false;
     this.overallExpired = false;
