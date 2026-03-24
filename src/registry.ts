@@ -27,6 +27,9 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   }
 
   public get hasAlreadyTriggered(): boolean {
+    if (this.hasTriggered) {
+      this.logger?.error({ msg: 'cleanup registry trigger was attempted but it has already been triggered' });
+    }
     return this.hasTriggered;
   }
 
@@ -152,7 +155,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   private finish(status: FinishStatus): void {
     clearTimeout(this.overallExpireTimer);
     this.emit('finished', status);
-    this.logger?.info({ msg: 'cleanup registry finished', status });
+    this.logger?.info({ msg: 'cleanup registry finished', status, registrySize: this.registry.length, overallTimeout: this.overallTimeout });
   }
 
   private async cleanup(): Promise<void> {
@@ -160,6 +163,12 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
       let itemCompleted = false;
 
       while (!itemCompleted && !this.overallExpired) {
+        this.logger?.debug({
+          msg: 'executing item cleanup function',
+          itemId: item.id,
+          itemTimeout: item.timeout,
+          itemTimeoutAfterFailure: item.timeoutAfterFailure,
+        });
         const timeoutFunction = promiseTimeout(item.func(), item.timeout);
 
         const [error] = await promiseResult(timeoutFunction);
