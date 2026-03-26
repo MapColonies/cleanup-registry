@@ -27,16 +27,11 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   }
 
   public get hasAlreadyTriggered(): boolean {
-    if (this.hasTriggered) {
-      this.logger?.error({ msg: 'cleanup registry trigger was attempted but it has already been triggered' });
-    }
     return this.hasTriggered;
   }
 
   public register(options: RegisterOptions): ItemId {
-    if (this.hasTriggered) {
-      throw new AlreadyTriggeredError();
-    }
+    this.triggerGuard();
 
     const { func, id, timeout, timeoutAfterFailure } = options;
 
@@ -84,9 +79,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   }
 
   public remove(removeItem: RemoveItem): void {
-    if (this.hasTriggered) {
-      throw new AlreadyTriggeredError();
-    }
+    this.triggerGuard();
 
     const { func: funcForRemoval, id: funcIdForRemoval } = removeItem;
 
@@ -103,9 +96,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   }
 
   public async trigger(triggerOptions: TriggerOptions = DEFAULT_TRIGGER_OPTIONS): Promise<void> {
-    if (this.hasTriggered) {
-      throw new AlreadyTriggeredError();
-    }
+    this.triggerGuard();
 
     const { ignorePreError, ignorePostError } = triggerOptions;
     this.hasTriggered = true;
@@ -117,6 +108,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
 
     if (this.preCleanupHook) {
       this.logger?.debug({ msg: 'executing pre-cleanup hook' });
+
       const [preErr] = await promiseResult(this.preCleanupHook());
       if (preErr !== undefined) {
         this.logger?.error({ msg: 'an error occurred while executing the pre-cleanup hook', ignorePreError, err: preErr });
@@ -131,6 +123,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
 
     if (this.postCleanupHook && !this.overallExpired) {
       this.logger?.debug({ msg: 'executing post-cleanup hook' });
+
       const [postErr] = await promiseResult(this.postCleanupHook());
       if (postErr !== undefined) {
         this.logger?.error({ msg: 'an error occurred while executing the post-cleanup hook', ignorePostError, err: postErr });
@@ -150,6 +143,13 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
     this.hasTriggered = false;
     this.overallExpired = false;
     clearTimeout(this.overallExpireTimer);
+  }
+
+  private triggerGuard(): void {
+    if (this.hasAlreadyTriggered) {
+      this.logger?.error({ msg: 'cleanup registry operation was attempted but it has already been triggered' });
+      throw new AlreadyTriggeredError();
+    }
   }
 
   private finish(status: FinishStatus): void {
@@ -199,7 +199,7 @@ export class CleanupRegistry extends TypedEmitter<RegistryEvents> {
   private initCleanupExpiredTimer(): void {
     this.overallExpireTimer = setTimeout(() => {
       this.overallExpired = true;
-      this.logger?.warn({ msg: 'cleanup registry overall timeout expired', overallTimeout: this.overallTimeout });
+      this.logger?.warn({ msg: 'cleanup registry overall timeout expired', overallTimeout: this.overallTimeout, registrySize: this.registry.length });
     }, this.overallTimeout);
   }
 }
