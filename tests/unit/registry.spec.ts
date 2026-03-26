@@ -92,6 +92,36 @@ describe('registry', () => {
       expect(finishedEventHandler).toHaveBeenCalledWith('timeout');
     });
 
+    it('preCleanupHook should throw exactly what the user inserts', async function () {
+      const customError = 6;
+      const preCleanupHook = jest.fn().mockRejectedValue(customError);
+
+      const registry = new CleanupRegistry({ preCleanupHook });
+
+      registry.on('itemFailed', itemFailedEventHandler);
+      registry.on('finished', finishedEventHandler);
+
+      await expect(registry.trigger({ ignorePreError: false })).rejects.toBe(customError);
+
+      expect(preCleanupHook).toHaveBeenCalledTimes(1);
+      expect(finishedEventHandler).toHaveBeenCalledWith('preFailed');
+    });
+
+    it('postCleanupHook should throw exactly what the user inserts', async function () {
+      const customError = 7;
+      const postCleanupHook = jest.fn().mockRejectedValue(customError);
+
+      const registry = new CleanupRegistry({ postCleanupHook });
+
+      registry.on('itemFailed', itemFailedEventHandler);
+      registry.on('finished', finishedEventHandler);
+
+      await expect(registry.trigger({ ignorePostError: false })).rejects.toBe(customError);
+
+      expect(postCleanupHook).toHaveBeenCalledTimes(1);
+      expect(finishedEventHandler).toHaveBeenCalledWith('postFailed');
+    });
+
     it('should emit an finished event with timeout if triggered function keeps on rejecting', async function () {
       const registry = new CleanupRegistry({ overallTimeout: OVERALL_TIMEOUT });
 
