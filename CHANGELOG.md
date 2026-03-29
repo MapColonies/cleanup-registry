@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## 1.2.0 (2026-03-29)
+
+
+### Features
+
+* add logger to constructor ([#8](https://github.com/MapColonies/cleanup-registry/issues/8)) ([ec9eeae](https://github.com/MapColonies/cleanup-registry/commit/ec9eeae5472fa0747814a83419c6843b929e4226))
+
 ## 1.1.0 (2022-07-24)
 
 
