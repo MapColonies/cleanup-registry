@@ -5,7 +5,7 @@ metadata:
   description: A package for calling async functions to be resolved in a configured loop
   annotations:
     github.com/project-slug: MapColonies/cleanup-registry
-  tags: 
+  tags:
     - nodejs
     - typescript
 spec:

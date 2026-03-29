@@ -10,7 +10,7 @@ export const promiseResult = async <T>(promise: Promise<T>): Promise<[undefined,
 };
 
 export const promiseTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> => {
-  let timer: NodeJS.Timer;
+  let timer: NodeJS.Timeout | undefined;
 
   const timeout = new Promise<T>((_, reject) => {
     timer = setTimeout(() => {
