@@ -1,0 +1,27 @@
+name: init-npm
+description: 'Initialize the repo with npm and install all the dependencies'
+inputs: 
+  node-version:
+    description: 'Node.js version'
+    required: true
+    default: '24.x'
+  skip-build:
+    description: boolean value wether should skip build strategy
+    required: true
+    default: "false"
+runs:
+  using: composite
+  steps:
+  - name: Set up Node.js
+    uses: actions/setup-node@v4
+    with:
+      node-version: ${{ inputs.node-version }}
+      cache: npm
+  - name: Install TS Project dependencies
+    shell: bash
+    run: npm ci
+
+  - name: build
+    if: ${{ inputs.skip-build == 'true' }}
+    shell: bash
+    run: npm run build
