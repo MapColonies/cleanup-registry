@@ -11,3 +11,4 @@ tsconfig.json
 coverage
 reports
 docs
+.release-please-manifest.json
