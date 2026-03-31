@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.3.0](https://github.com/MapColonies/cleanup-registry/compare/v1.2.0...v1.3.0) (2026-03-31)
+
+
+### Features
+
+* add backstage docs ([c7b6cf5](https://github.com/MapColonies/cleanup-registry/commit/c7b6cf52f32f4db5e1631a4f272e2662e8ac43d2))
+* add logger to constructor ([#8](https://github.com/MapColonies/cleanup-registry/issues/8)) ([ec9eeae](https://github.com/MapColonies/cleanup-registry/commit/ec9eeae5472fa0747814a83419c6843b929e4226))
+* implementation ([#5](https://github.com/MapColonies/cleanup-registry/issues/5)) ([e2b9f87](https://github.com/MapColonies/cleanup-registry/commit/e2b9f87708148c70f1dd37399bd91114656ab8c2))
+
 ## 1.2.0 (2026-03-29)
 
 
